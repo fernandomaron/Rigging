@@ -1,0 +1,19 @@
+name: grafica
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - numpy
+  - pip
+  - pyopengl
+  - python
+  - mesa
+  - trimesh
+  - networkx
+  - pillow
+  - matplotlib
+  - scipy
+  - cffi
+  - pip:
+    - pyglet>=2.0.0
+    - pymunk

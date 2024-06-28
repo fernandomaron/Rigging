@@ -1,0 +1,5 @@
+__pycache__/
+.vscode/
+imgui.ini
+.DS_Store
+pyproject.toml

@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ybot
+* source:	https://sketchfab.com/3d-models/ybot-804410ae075a4f58b3e94f3396587484
+* author:	mand0fam (https://sketchfab.com/mandofam)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ybot" (https://sketchfab.com/3d-models/ybot-804410ae075a4f58b3e94f3396587484) by mand0fam (https://sketchfab.com/mandofam) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
