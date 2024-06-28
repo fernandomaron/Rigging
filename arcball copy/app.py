@@ -33,15 +33,15 @@ if __name__ == "__main__":
     # con esto forzamos que siempre entregue una escena
     asset = tm.load(sys.argv[1], force="scene")
     mesh = tm.load(sys.argv[1], force="mesh")
-    print("Camera", asset.camera_transform)
-    print("Graph", asset.graph.to_edgelist())
-    a = asset.camera_transform
-    print(a[2][3])
+    print(asset.camera)
+    a = asset.graph.to_edgelist()
+    digraph = asset.graph.to_networkx()
     #for x in digraph.adjacency():
     #    print(x)
 
     print("mesh scale", mesh.scale)
     print(type(asset))
+    factor = 2
     # de acuerdo a la documentación de trimesh, esto centra la escena
     # no es igual a trabajar con una malla directamente
     scale = 1 / (asset.scale)
@@ -51,6 +51,8 @@ if __name__ == "__main__":
     first = asset.scale
     # y esto la escala. se crea una copia, por eso la asignación
     asset = asset.scaled(scale)
+    center = asset.centroid
+    #asset.rezero()
     print("segunda escala", asset.scale)
     second = asset.scale
     # como no todos los archivos que carguemos tendrán textura,
@@ -135,7 +137,8 @@ if __name__ == "__main__":
         gltf,
         axis_gpu,
         axis_pipeline,
-        1,
+        scale,
+        center
     )
 
     # el estado del programa almacena el grafo de escena en vez de los modelos 3D
@@ -143,7 +146,7 @@ if __name__ == "__main__":
         "scene_graph": graph,
         "total_time": 0.0,
         "view": tr.lookAt(
-            np.array([0, 0, 5]), np.array([0, 0, 0]), np.array([0, 1, 0])
+            np.array([5, 5, 5]), np.array([0, 0, 0]), np.array([0, 1, 0])
         ),
         "projection": tr.perspective(45, float(width) / float(height), 0.1, 100),
     }

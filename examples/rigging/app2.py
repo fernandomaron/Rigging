@@ -84,6 +84,7 @@ def create_axis_graph(json, axis, axis_pipeline, scale):
     graph, count, length = recursive_add_node(graph, json, count, axis, axis_pipeline, scale)
     graph.add_edge('root', json.nodes[json.skins[0].joints[0]].name)
     print('root ->', json.nodes[json.skins[0].joints[0]].name)
+    print(graph)
     return graph
 
 def create_solar_system(
