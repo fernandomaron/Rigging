@@ -1,11 +1,12 @@
 #version 330
 
 in vec3 frag_position;
-in vec2 frag_texcoord;
+in vec4 frag_color;
 in vec3 frag_normal;
-out vec4 outColor;
-uniform sampler2D sampler_tex;
+
 uniform vec3 light_position;
+
+out vec4 outColor;
 
 void main()
 {
@@ -19,8 +20,5 @@ void main()
     float diff = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = Kd * Ld * diff;
 
-    vec4 texel = texture(sampler_tex, frag_texcoord) * vec4(diffuse, 0.3);
-    if (texel.a < 0.5)
-        discard;
-    outColor = texel;
+    outColor = frag_color * vec4(diffuse, 0.2);
 }

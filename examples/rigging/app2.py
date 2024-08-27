@@ -7,7 +7,6 @@ import numpy as np
 import pyglet
 import pyglet.gl as GL
 import trimesh as tm
-import random
 
 import struct
 from pygltflib import GLTF2
@@ -18,6 +17,7 @@ sys.path.append(
 
 import grafica.transformations as tr
 from grafica.utils import load_pipeline
+from arcball2.app import addArcBall
 
 
 # esta función crea nuestro grafo de escena.
@@ -29,14 +29,14 @@ from grafica.utils import load_pipeline
 # cosas como el pipeline correspondiente a cada malla y los atributos que reciben los pipelines
 # son almacenadas como atributos de cada nodo de la red.
 
-def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1):
+def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1, center = [0, 0, 0]):
     bone_list = json.skins[0].joints
     node = json.nodes[bone_list[count]]
     node_transform = tr.identity()
     length_in = 0.5
     length_out = 0.5
     if count == 0:
-        node_transform = tr.uniformScale(escale)
+        node_transform = tr.translate(-center[0], -center[1], -center[2]) @ tr.uniformScale(escale)
     if node.scale:
         node_transform = tr.scale(*node.scale) @ node_transform 
     if node.rotation:
@@ -77,14 +77,13 @@ def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1):
     return graph, count, length_in
     
 
-def create_axis_graph(json, axis, axis_pipeline, scale):
+def create_axis_graph(json, axis, axis_pipeline, scale, center):
     graph = nx.DiGraph(root="root")
     graph.add_node('root')
     count = 0
-    graph, count, length = recursive_add_node(graph, json, count, axis, axis_pipeline, scale)
+    graph, count, length = recursive_add_node(graph, json, count, axis, axis_pipeline, scale, center)
     graph.add_edge('root', json.nodes[json.skins[0].joints[0]].name)
     print('root ->', json.nodes[json.skins[0].joints[0]].name)
-    print(graph)
     return graph
 
 def create_solar_system(
@@ -114,6 +113,7 @@ def create_solar_system(
             node_pipeline = mesh_pipeline
 
         print(node_transform)      
+
         if node.scale:
             node_transform = tr.scale(*node.scale) @ node_transform 
         if node.rotation:
@@ -188,7 +188,7 @@ if __name__ == "__main__":
         v = struct.unpack("<ffffffffffffffff", d)  # convert from base64 to three floats
 
         inverse_bind.append(np.array(v).reshape(4, 4))
-
+    print(inverse_bind)
     # cargamos una esfera y la convertimos en una bola de diámetro 1
     mesh = tm.load(filename, force="mesh")
     asset = tm.load(filename, force="scene")
@@ -209,22 +209,19 @@ if __name__ == "__main__":
     mesh_gpu.position[:] = mesh_vertex_list[4][1]
 
     # creamos los ejes. los graficaremos con GL_LINES
-    #axis_positions = np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1])
+    axis_positions = np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1])
     axis_colors = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1])
     axis_indices = np.array([0, 1, 2, 3, 4, 5])
 
     axis_pipeline = load_pipeline(Path(os.path.dirname(__file__)) / "line_vertex_program.glsl", Path(os.path.dirname(__file__)) / ".." / "hello_world" / "fragment_program.glsl")
 
     axis_gpu = axis_pipeline.vertex_list_indexed(6, GL.GL_LINES, axis_indices)
-    #axis_gpu.position[:] = axis_positions
+    axis_gpu.position[:] = axis_positions
     axis_gpu.color[:] = axis_colors
 
     # creamos el grafo de escena con la función definida más arriba
     graph = create_axis_graph(
-        gltf,
-        axis_gpu,
-        axis_pipeline,
-        1
+        mesh, mesh_gpu, 
     )
 
     # el estado del programa almacena el grafo de escena en vez de los modelos 3D

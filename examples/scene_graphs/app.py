@@ -23,64 +23,24 @@ import grafica.transformations as tr
 # lo hacemos todo con la biblioteca networkx.
 # cosas como el pipeline correspondiente a cada malla y los atributos que reciben los pipelines
 # son almacenadas como atributos de cada nodo de la red.
-def create_solar_system(mesh, mesh_pipeline, axis, axis_pipeline):
-    graph = nx.DiGraph(root="sun")
 
-    graph.add_node("sun", transform=tr.identity())
+def create_mesh(mesh, mesh_pipeline, graph, name):  
+
     graph.add_node(
-        "sun_geometry",
+        name,
+        transform=tr.identity(),
+    ) 
+
+    graph.add_node(
+        name+"_geometry",
         mesh=mesh,
         pipeline=mesh_pipeline,
-        transform=tr.uniformScale(0.8),
-        color=np.array((1.0, 0.73, 0.03)),
+        transform=tr.identity(),
+        mode=GL.GL_TRIANGLES,
+        color=np.array((1.0, 0.73, 0.03)) 
     )
-    graph.add_node(
-        "sun_axis",
-        mesh=axis,
-        pipeline=axis_pipeline,
-        transform=tr.uniformScale(1.25),
-        mode=GL.GL_LINES,
-    )
-    graph.add_edge("sun", "sun_geometry")
-    graph.add_edge("sun", "sun_axis")
-
-    graph.add_node("earth", transform=tr.translate(2.5, 0.0, 0.0))
-    graph.add_node(
-        "earth_geometry",
-        transform=tr.uniformScale(0.3),
-        mesh=mesh,
-        pipeline=mesh_pipeline,
-        color=np.array((0.0, 0.59, 0.78)),
-    )
-    graph.add_node(
-        "earth_axis",
-        mesh=axis,
-        pipeline=axis_pipeline,
-        transform=tr.uniformScale(0.25),
-        mode=GL.GL_LINES,
-    )
-    graph.add_edge("sun", "earth")
-    graph.add_edge("earth", "earth_geometry")
-    graph.add_edge("earth", "earth_axis")
-
-    graph.add_node("moon", transform=tr.translate(0.5, 0.0, 0.0))
-    graph.add_node(
-        "moon_geometry",
-        transform=tr.uniformScale(0.1),
-        mesh=mesh,
-        pipeline=mesh_pipeline,
-        color=np.array((0.3, 0.3, 0.3)),
-    )
-    graph.add_node(
-        "moon_axis",
-        mesh=axis,
-        pipeline=axis_pipeline,
-        transform=tr.uniformScale(0.25),
-        mode=GL.GL_LINES,
-    )
-    graph.add_edge("earth", "moon")
-    graph.add_edge("moon", "moon_geometry")
-    graph.add_edge("moon", "moon_axis")
+    graph.add_edge(name, name+"_geometry")
+    graph.add_edge('root', name)
 
     return graph
 
@@ -97,12 +57,10 @@ def update_solar_system(dt, window):
     # cada nodo es almacenado como un diccionario
     # por tanto, accedemos a él y a sus atributos con llaves de diccionario
     # que conocemos porque nosotres construimos el grafo
-    graph.nodes["earth"]["transform"] = tr.rotationY(2 * total_time) @ tr.translate(
-        2.5, 0.0, 0.0
-    )
-    graph.nodes["moon"]["transform"] = tr.rotationY(3 * total_time) @ tr.translate(
-        0.5, 0.0, 0.0
-    )
+    graph.nodes["root"]["transform"] = tr.rotationY(2 * total_time)
+    #graph.nodes["moon"]["transform"] = tr.rotationY(3 * total_time) @ tr.translate(
+    #    0.5, 0.0, 0.0
+    #)
 
 
 if __name__ == "__main__":
@@ -112,11 +70,20 @@ if __name__ == "__main__":
     window = pyglet.window.Window(width, height)
 
     # cargamos una esfera y la convertimos en una bola de diámetro 1
-    mesh = tm.load("assets/sphere.off")
+    sceneMesh = tm.load("assets/ybot.gltf")
+    graph = nx.DiGraph(root = "root")
+    mesh = None
+    for x in sceneMesh.geometry:
+        current_mesh = sceneMesh.geometry[x]
+        if mesh == None:
+            mesh = current_mesh
+        else:
+            mesh = tm.util.concatenate(mesh, current_mesh)
     model_scale = tr.uniformScale(2.0 / mesh.scale)
     model_translate = tr.translate(*-mesh.centroid)
     mesh.apply_transform(model_scale @ model_translate)
-
+    mesh_vertex_list = tm.rendering.mesh_to_vertexlist(mesh)
+    #print("Vertex list",tm.rendering.mesh_to_vertexlist(mesh))
     with open(Path(os.path.dirname(__file__)) / "mesh_vertex_program.glsl") as f:
         vertex_source_code = f.read()
 
@@ -128,12 +95,13 @@ if __name__ == "__main__":
     vert_shader = pyglet.graphics.shader.Shader(vertex_source_code, "vertex")
     frag_shader = pyglet.graphics.shader.Shader(fragment_source_code, "fragment")
     solar_pipeline = pyglet.graphics.shader.ShaderProgram(vert_shader, frag_shader)
-
-    mesh_vertex_list = tm.rendering.mesh_to_vertexlist(mesh)
     mesh_gpu = solar_pipeline.vertex_list_indexed(
         len(mesh_vertex_list[4][1]) // 3, GL.GL_TRIANGLES, mesh_vertex_list[3]
     )
     mesh_gpu.position[:] = mesh_vertex_list[4][1]
+    print(mesh.visual.material)
+    print(mesh.visual.to_color().main_color)
+    mesh_gpu.color[:] = []
 
     # creamos los ejes. los graficaremos con GL_LINES
     axis_positions = np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1])
@@ -150,7 +118,10 @@ if __name__ == "__main__":
     axis_gpu.color[:] = axis_colors
 
     # creamos el grafo de escena con la función definida más arriba
-    graph = create_solar_system(mesh_gpu, solar_pipeline, axis_gpu, axis_pipeline)
+    graph = create_mesh(mesh_gpu, solar_pipeline, graph, x)
+    #graph = create_solar_system(mesh_gpu, solar_pipeline, axis_gpu, axis_pipeline)
+    print(graph)
+        
 
     # el estado del programa almacena el grafo de escena en vez de los modelos 3D
     window.program_state = {

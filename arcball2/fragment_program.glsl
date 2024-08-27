@@ -19,7 +19,7 @@ void main()
     float diff = max(dot(normal, light_dir), 0.0);
     vec3 diffuse = Kd * Ld * diff;
 
-    vec4 texel = texture(sampler_tex, frag_texcoord) * vec4(diffuse, 0.3);
+    vec4 texel = texture(sampler_tex, frag_texcoord) * vec4(diffuse, 1.0);
     if (texel.a < 0.5)
         discard;
     outColor = texel;

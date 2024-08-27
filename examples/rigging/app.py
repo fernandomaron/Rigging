@@ -16,22 +16,8 @@ sys.path.append(
 )
 
 import grafica.transformations as tr
+from grafica.utils import load_pipeline
 
-def recursive_add_node(nodes, graph, parent, current, bones_num, bones_pos, count, axis, axis_pipeline, parent_pos):
-    graph.add_node(
-        current,
-        mesh=axis,
-        pipeline=axis_pipeline,
-        transform=bones_pos[count],
-        mode=GL.GL_LINES,
-    )
-    print("node added")
-    graph.add_edge(parent, current)
-    if nodes[bones_num[count]].children:
-        for i in nodes[bones_num[count]].children:
-            count+=1
-            graph, count = recursive_add_node(nodes, graph, current, "sun_axis" + str(count), bones_num, bones_pos, count, axis, axis_pipeline, parent_pos @ bones_pos[count])
-    return graph, count
 
 # esta función crea nuestro grafo de escena.
 # esencialmente hace lo siguiente:
@@ -41,26 +27,46 @@ def recursive_add_node(nodes, graph, parent, current, bones_num, bones_pos, coun
 # lo hacemos todo con la biblioteca networkx.
 # cosas como el pipeline correspondiente a cada malla y los atributos que reciben los pipelines
 # son almacenadas como atributos de cada nodo de la red.
-def create_solar_system(mesh, mesh_pipeline, axis, axis_pipeline, bones_num, bones_pos, nodes):
-    graph = nx.DiGraph(root="sun")
+def create_solar_system(
+    mesh, mesh_pipeline, axis, axis_pipeline, bones_pos, nodes
+):
+    for i, node in enumerate(nodes):
+        print(i, node)
 
-    graph.add_node("sun", transform=tr.identity())
-    graph.add_node(
-        "sun_geometry",
-        mesh=mesh,
-        pipeline=mesh_pipeline,
-        transform=tr.uniformScale(1),
-        color=np.array((1.0, 0.73, 0.03)),
-    )
-    
-    graph.add_edge("sun", "sun_geometry")
-    count = 0
-    parent_graph = "sun"
-    current_graph = "sun_axis"+str(count)
-    graph, count = recursive_add_node(nodes, graph, parent_graph, current_graph, bones_num, bones_pos, count, axis, axis_pipeline, tr.identity())
+    graph = nx.DiGraph(root="root")
+    graph.add_node('root')
+
+    for i, node in enumerate(nodes):
+        if node.name in ('Camera', 'Light'):
+            continue
+
+        node_mesh = None
+        node_pipeline = None
+        if node.mesh is None and node.name != 'Armature':
+            node_mesh = axis
+            node_pipeline = axis_pipeline
+        elif node.mesh is not None:
+            node_mesh = mesh
+            node_pipeline = mesh_pipeline
+
+        graph.add_node(
+            node.name,
+            mesh=node_mesh,
+            pipeline=node_pipeline,
+            transform=bones_pos.get(i, tr.identity()),
+            mode=GL.GL_LINES if node.mesh is None else GL.GL_TRIANGLES,
+            color=np.array((1.0, 0.73, 0.03)) if not node.mesh is None else None
+        )
+        print("node added", node.name)
+        for dst in node.children:
+            graph.add_edge(node.name, nodes[dst].name)
+            print(node.name, '->', nodes[dst].name)
+
     print(graph)
+    graph.add_edge('root', 'Armature')
 
     return graph
+
 
 # esta función actualiza el grafo de escena en función del tiempo
 # en este caso, hace algo similar a lo que hemos hecho en ejemplos anteriores
@@ -71,7 +77,7 @@ def update_solar_system(dt, window):
 
     graph = window.program_state["scene_graph"]
 
-    graph.nodes["sun"]["transform"] = tr.rotationY(total_time)
+    graph.nodes[graph.graph["root"]]["transform"] = tr.rotationY(total_time)
 
     # para acceder a un nodo del grafo utilizamos su atributo .nodes
     # cada nodo es almacenado como un diccionario
@@ -85,7 +91,7 @@ if __name__ == "__main__":
 
     window = pyglet.window.Window(width, height)
 
-    filename = "assets/cube3.gltf"
+    filename = "assets/cube2.gltf"
     gltf = GLTF2().load(filename)
     data = gltf.get_data_from_buffer_uri(gltf.buffers[0].uri)
     bones_num = gltf.skins[0].joints
@@ -94,14 +100,18 @@ if __name__ == "__main__":
     inverse_bind = []
     print("Inverse Bind: ")
     for i in range(gltf.accessors[inverse_accesor].count):
-        index = gltf.bufferViews[inverse_accesor].byteOffset + gltf.accessors[inverse_accesor].byteOffset + i*64  # the location in the buffer of this vertex
-        d = data[index:index+64]  # the vertex data
-        v = struct.unpack("<ffffffffffffffff", d)   # convert from base64 to three floats
-        
-        inverse_bind.append(v)
-        print(i, v)
+        index = (
+            gltf.bufferViews[inverse_accesor].byteOffset
+            + gltf.accessors[inverse_accesor].byteOffset
+            + i * 64
+        )  # the location in the buffer of this vertex
+        d = data[index : index + 64]  # the vertex data
+        v = struct.unpack("<ffffffffffffffff", d)  # convert from base64 to three floats
 
-    bones_pos =[]
+        inverse_bind.append(np.array(v).reshape(4, 4))
+        print(i, np.array(v).reshape(4, 4, order='F'))
+
+    bones_pos = {}
     for i in range(len(bones_num)):
         node = bones_num[i]
         rotation = tr.identity()
@@ -112,33 +122,27 @@ if __name__ == "__main__":
             print("rotation:")
             print(rotation)
         if gltf.nodes[node].translation:
-            translation = tm.transformations.translation_matrix(gltf.nodes[node].translation)
+            translation = tm.transformations.translation_matrix(
+                gltf.nodes[node].translation
+            )
             print("translation:")
             print(scale)
         if gltf.nodes[node].scale:
-            print("scale gltf ", gltf.nodes[node].scale)
-            scale = tr.scale(gltf.nodes[node].scale[0], gltf.nodes[node].scale[1], gltf.nodes[node].scale[2])
+            scale = tr.scale(*gltf.nodes[node].scale)
+            print("scale:")
             print(scale)
-        bones_pos.append(translation @ rotation @ scale )
-        
-    print(bones_pos)
+        bones_pos[node] = translation @ rotation @ scale
+
+    print('bones_pos', bones_pos)
+
     # cargamos una esfera y la convertimos en una bola de diámetro 1
-    mesh = tm.load(filename, force="mesh")
+    mesh = tm.load("assets/cube2.gltf", force="mesh")
+    print(mesh)
     #model_scale = tr.uniformScale(1)
     #model_translate = tr.translate(*-mesh.centroid)
     #mesh.apply_transform(model_scale @ model_translate)
 
-    with open(Path(os.path.dirname(__file__)) / "mesh_vertex_program.glsl") as f:
-        vertex_source_code = f.read()
-
-    with open(
-        Path(os.path.dirname(__file__)) / ".." / "hello_world" / "fragment_program.glsl"
-    ) as f:
-        fragment_source_code = f.read()
-
-    vert_shader = pyglet.graphics.shader.Shader(vertex_source_code, "vertex")
-    frag_shader = pyglet.graphics.shader.Shader(fragment_source_code, "fragment")
-    solar_pipeline = pyglet.graphics.shader.ShaderProgram(vert_shader, frag_shader)
+    solar_pipeline = load_pipeline(Path(os.path.dirname(__file__)) / "mesh_vertex_program.glsl", Path(os.path.dirname(__file__)) / ".." / "hello_world" / "fragment_program.glsl")
 
     mesh_vertex_list = tm.rendering.mesh_to_vertexlist(mesh)
     mesh_gpu = solar_pipeline.vertex_list_indexed(
@@ -151,17 +155,21 @@ if __name__ == "__main__":
     axis_colors = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1])
     axis_indices = np.array([0, 1, 2, 3, 4, 5])
 
-    with open(Path(os.path.dirname(__file__)) / "line_vertex_program.glsl") as f:
-        vertex_source_code = f.read()
+    axis_pipeline = load_pipeline(Path(os.path.dirname(__file__)) / "line_vertex_program.glsl", Path(os.path.dirname(__file__)) / ".." / "hello_world" / "fragment_program.glsl")
 
-    vert_shader = pyglet.graphics.shader.Shader(vertex_source_code, "vertex")
-    axis_pipeline = pyglet.graphics.shader.ShaderProgram(vert_shader, frag_shader)
     axis_gpu = axis_pipeline.vertex_list_indexed(6, GL.GL_LINES, axis_indices)
     axis_gpu.position[:] = axis_positions
     axis_gpu.color[:] = axis_colors
 
     # creamos el grafo de escena con la función definida más arriba
-    graph = create_solar_system(mesh_gpu, solar_pipeline, axis_gpu, axis_pipeline, bones_num, bones_pos, gltf.nodes)
+    graph = create_solar_system(
+        mesh_gpu,
+        solar_pipeline,
+        axis_gpu,
+        axis_pipeline,
+        bones_pos,
+        gltf.nodes,
+    )
 
     # el estado del programa almacena el grafo de escena en vez de los modelos 3D
     window.program_state = {
@@ -209,16 +217,16 @@ if __name__ == "__main__":
 
         # a medida que nos movemos por las aristas vamos a necesitar la transformación de cada nodo
         # partimos con la transformación del nodo raíz
-        transformations = {root_key: graph.nodes[root_key]["transform"]}
+        transformations = {root_key: graph.nodes[root_key].get("transform", tr.identity())}
 
         for src, dst in edges:
             current_node = graph.nodes[dst]
 
             if not dst in transformations:
-                dst_transform = current_node["transform"]
+                dst_transform = current_node.get("transform", tr.identity())
                 transformations[dst] = transformations[src] @ dst_transform
 
-            if "mesh" in current_node:
+            if "mesh" in current_node and current_node['mesh'] is not None:
                 current_pipeline = current_node["pipeline"]
                 current_pipeline.use()
 
@@ -230,12 +238,15 @@ if __name__ == "__main__":
                     if attr in ("mesh", "pipeline", "transform", "mode"):
                         continue
 
+                    if current_node[attr] is None:
+                        continue
+
                     current_attr = current_node[attr]
                     current_size = current_node[attr].shape[0]
 
                     if len(current_node[attr].shape) > 1:
                         current_size = current_size * current_node[attr].shape[1]
-                        
+
                     current_pipeline[attr] = current_node[attr].reshape(
                         current_size, 1, order="F"
                     )

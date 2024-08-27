@@ -1,11 +1,11 @@
 #version 330
 in vec3 position;
-uniform vec4 color;
+in vec3 color;
 uniform mat4 transform;
 uniform mat4 view;
 uniform mat4 projection;
 
-out vec4 fragColor;
+out vec3 fragColor;
 
 void main()
 {

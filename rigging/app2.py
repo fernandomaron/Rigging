@@ -7,6 +7,7 @@ import numpy as np
 import pyglet
 import pyglet.gl as GL
 import trimesh as tm
+import random
 
 import struct
 from pygltflib import GLTF2
@@ -17,7 +18,6 @@ sys.path.append(
 
 import grafica.transformations as tr
 from grafica.utils import load_pipeline
-from arcball2.app import addArcBall
 
 
 # esta función crea nuestro grafo de escena.
@@ -29,14 +29,14 @@ from arcball2.app import addArcBall
 # cosas como el pipeline correspondiente a cada malla y los atributos que reciben los pipelines
 # son almacenadas como atributos de cada nodo de la red.
 
-def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1, center= [0,0,0]):
+def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1):
     bone_list = json.skins[0].joints
     node = json.nodes[bone_list[count]]
     node_transform = tr.identity()
-    axis_positions = np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1])
-    length = 1
-    #if count == 0:
-    #    node_transform = tr.uniformScale(escale)
+    length_in = 0.5
+    length_out = 0.5
+    if count == 0:
+        node_transform = tr.uniformScale(escale)
     if node.scale:
         node_transform = tr.scale(*node.scale) @ node_transform 
     if node.rotation:
@@ -47,40 +47,46 @@ def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1, cent
         q = tm.transformations.quaternion_multiply(q, qz)
         node_transform = tm.transformations.quaternion_matrix(q) @ node_transform
     if node.translation:
+        length_in = np.linalg.norm(tr.translate(*node.translation) - tr.translate(0,0,0))
         node_transform = tr.translate(*node.translation) @ node_transform
         #print (node.name, node.translation)
     
-   
+    graph.add_node(
+        node.name,
+        transform=node_transform,
+    )
     #print (node.name, axis.position)
     
     if node.children:
+        print("hello mario")
         for child in node.children:
-            graph, count, length = recursive_add_node(graph, json, count+1, axis, axis_pipeline)
-            #print(node.name, "->", json.nodes[child].name)
+            graph, count, length_out = recursive_add_node(graph, json, count+1, axis, axis_pipeline)
+            graph.add_edge(node.name, json.nodes[child].name)
+            print("it'sa me yahoo")
+            print(node.name, "->", json.nodes[child].name)
     
-    axis_positions = np.array([0, 0, 0, length, 0, 0, 0, 0, 0, 0, length, 0, 0, 0, 0, 0, 0, length])
-    axis.position[:] = axis_positions 
+    
     graph.add_node(
-        node.name,
+        "axis"+node.name,
         mesh=axis,
         pipeline=axis_pipeline,
-        transform=node_transform,
+        transform=tr.uniformScale(length_out),
         mode=GL.GL_LINES if node.mesh is None else GL.GL_TRIANGLES,
         color=np.array((1.0, 0.73, 0.03)) if not node.mesh is None else None
     )
-    if node.children:
-        for child in node.children:
-            graph.add_edge(node.name, json.nodes[child].name)
-    return graph, count, length
+    graph.add_edge(node.name, "axis"+node.name)
+    print(node.name, "axis"+node.name, length_out)
+    return graph, count, length_in
     
 
-def create_axis_graph(json, axis, axis_pipeline, scale,center):
+def create_axis_graph(json, axis, axis_pipeline, scale):
     graph = nx.DiGraph(root="root")
     graph.add_node('root')
     count = 0
-    graph, count, length =recursive_add_node(graph, json, count, axis, axis_pipeline, scale, center)
+    graph, count, length = recursive_add_node(graph, json, count, axis, axis_pipeline, scale)
     graph.add_edge('root', json.nodes[json.skins[0].joints[0]].name)
     print('root ->', json.nodes[json.skins[0].joints[0]].name)
+    print(graph)
     return graph
 
 def create_solar_system(
