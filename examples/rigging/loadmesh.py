@@ -130,7 +130,7 @@ def addJointDict(joints, cjoint, graph, axis, axis_pipeline, point_list, parent_
             graph.add_edge(cjoint, node)
             graph.add_edge(node, "axis"+node)
             point_list.append(parent_point @ np.array(joints[cjoint][node]["matrix"]))
-            g_bones.append(np.array(joints[cjoint][node]["matrix"]))
+            g_bones.append(parent_point @ np.array(joints[cjoint][node]["matrix"]))
             addJointDict(joints, node, graph, axis, axis_pipeline, point_list, parent_point @ np.matrix(joints[cjoint][node]["matrix"]))
     return graph
 
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
     window = pyglet.window.Window(width, height)
 
-    filename = "assets/xbot/scene.gltf"
+    filename = "assets/yBot.gltf"
     triMesh = tm.load(filename)
     meshGraph = triMesh.graph.to_networkx()
     
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     #     print("geo before", tm.rendering.mesh_to_vertexlist(object_geometry)[4][1])
     # de acuerdo a la documentación de trimesh, esto centra la escena
     # # no es igual a trabajar con una malla directamente
-    scale = 1.0 / asset.scale 
+    scale = 1.0 / (asset.scale) 
     center = asset.centroid
     # asset.rezero()
     # y esto la escala. se crea una copia, por eso la asignación
@@ -246,10 +246,11 @@ if __name__ == "__main__":
 
     vBindReverse = vBindReverse + ([tr.identity()] * (70 - len(vBindReverse)))
 
+    node_scale = 1.0/np.linalg.norm(cloud.bounds[0] - cloud.bounds[1])
     v_bones = []
 
     for i in range(len(g_bones)):
-        v_bones.append(g_bones[i] @ vBindReverse[i])
+        v_bones.append(g_bones[i] @ vBindReverse[i] @ tr.uniformScale(node_scale))
         
 
     print("v_nones:", len(v_bones))
@@ -257,7 +258,6 @@ if __name__ == "__main__":
 
     # g_bones = g_bones + ([np.ctypeslib.as_ctypes(np.copy((np.asarray(tr.identity().reshape(16, 1, order="F"))/255).flatten()).astype(np.float32))] * (70 - len(g_bones)))
     # g_bones2 = np.ctypeslib.ndpointer(dtype=ctypes.c_float, ndim=1) (*g_bones)
-    node_scale = 1.0/np.linalg.norm(cloud.bounds[0] - cloud.bounds[1])
 
 # como no todos los archivos que carguemos tendrán textura,
     # tendremos dos pipelines
@@ -318,6 +318,8 @@ if __name__ == "__main__":
         # las manipulamos del mismo modo que los vértices
         mesh["gpu_data"].Normal[:] = object_vlist[5][1]
 
+
+        print("wei:", weights[:20], "- joi:", joints[:20])
         mesh["gpu_data"].BoneWeights[:] = weights
         mesh["gpu_data"].BoneIndices[:] = joints
         # con (o sin) textura es diferente el procedimiento
@@ -389,7 +391,6 @@ if __name__ == "__main__":
             object_geometry["gpu_data"].draw(pyglet.gl.GL_TRIANGLES)
 
         # hay que recorrerlo desde un nodo raíz, que almacenamos como atributo del grafo
-        root_key = graph[rootJointNode]
         # tenemos que hacer un recorrido basado en profundidad (DFS).
         # networkx provee una función que nos entrega dicho recorrido!
         edges = list(nx.edge_dfs(graph, source="root"))

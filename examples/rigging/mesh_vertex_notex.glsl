@@ -11,7 +11,7 @@ in vec3 Position;
 in vec3 Normal;	
 in vec4 Color;
 in vec4 BoneWeights;
-in uvec4 BoneIndices;
+in vec4 BoneIndices;
 out vec4 frag_color;
 out vec3 frag_normal;
 out vec3 frag_position;
@@ -19,18 +19,20 @@ out vec3 frag_position;
 void main() {
 	mat4 bones[70] = mat4[70](bone0, bone1, bone2, bone3, bone4, bone5, bone6, bone7, bone8, bone9, bone10, bone11, bone12, bone13, bone14, bone15, bone16, bone17, bone18, bone19, bone20, bone21, bone22, bone23, bone24, bone25, bone26, bone27, bone28, bone29, bone30, bone31, bone32, bone33, bone34, bone35, bone36, bone37, bone38, bone39, bone40, bone41, bone42, bone43, bone44, bone45, bone46, bone47, bone48, bone49, bone50, bone51, bone52, bone53, bone54, bone55, bone56, bone57, bone58, bone59, bone60, bone61, bone62, bone63, bone64, bone65, bone66, bone67, bone68, bone69);
 
-	vec4 skinned =
-		  BoneWeights.x * ( bones[ BoneIndices.x ] * vec4(Position, 1.0))
-		+ BoneWeights.y * ( bones[ BoneIndices.y ] * vec4(Position, 1.0))
-		+ BoneWeights.z * ( bones[ BoneIndices.z ] * vec4(Position, 1.0))
-		+ BoneWeights.w * ( bones[ BoneIndices.w ] * vec4(Position, 1.0));
+	mat4 BoneTransform = bones[ int(BoneIndices[0]) ] * BoneWeights[0];
+	BoneTransform += bones[ int(BoneIndices[1]) ] * BoneWeights[1];
+	BoneTransform += bones[ int(BoneIndices[2]) ] * BoneWeights[2];
+	BoneTransform += bones[ int(BoneIndices[3]) ] * BoneWeights[3];
+
+	vec4 skinned = BoneTransform * vec4(Position, 1.0);
+
 	gl_Position = transform * skinned;
 
 	vec3 skinned_normal = inverse(transpose(
-		  BoneWeights.x * mat3(bones[ BoneIndices.x ])
-		+ BoneWeights.y * mat3(bones[ BoneIndices.y ])
-		+ BoneWeights.z * mat3(bones[ BoneIndices.z ])
-		+ BoneWeights.w * mat3(bones[ BoneIndices.w ]) )) * Normal;
+		  BoneWeights.x * mat3(bones[ int(BoneIndices[0]) ])
+		+ BoneWeights.y * mat3(bones[ int(BoneIndices[1]) ])
+		+ BoneWeights.z * mat3(bones[ int(BoneIndices[2]) ])
+		+ BoneWeights.w * mat3(bones[ int(BoneIndices[3]) ]) )) * Normal;
 
 	frag_normal = mat3(transpose(inverse(transform))) * skinned_normal;
 	frag_color = vec4(Color);
