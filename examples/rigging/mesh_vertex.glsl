@@ -25,7 +25,6 @@ void main() {
 		+ BoneWeights.y * ( bones[ BoneIndices.y ] * vec4(Position, 1.0))
 		+ BoneWeights.z * ( bones[ BoneIndices.z ] * vec4(Position, 1.0))
 		+ BoneWeights.w * ( bones[ BoneIndices.w ] * vec4(Position, 1.0));
-	gl_Position = transform * skinned;
 
 	vec3 skinned_normal = inverse(transpose(
 		  BoneWeights.x * mat3(bones[ BoneIndices.x ])
@@ -36,6 +35,6 @@ void main() {
 	frag_position = vec3(transform * skinned) + boni;
     frag_normal = mat3(transpose(inverse(transform))) * skinned_normal;
 
-	
+	gl_Position = vec4(frag_position, 1.0f);
     frag_texcoord = uv;
 }

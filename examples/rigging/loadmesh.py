@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
     window = pyglet.window.Window(width, height)
 
-    filename = "assets/yBot.gltf"
+    filename = "assets/cube3.gltf"
     triMesh = tm.load(filename)
     meshGraph = triMesh.graph.to_networkx()
     
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     g_bones = g_bones + ([tr.identity()] * (70 - len(g_bones)))
 
     vBindReverse = []
-    # Calculamos la posición de cada hueso segun su reverse bind al punto de origen
+    # Calculamos la posición de cada hueso segun su reverse bind al punto de origen5
     vBindReverse = parentBones(gltf, jointnums, bindReverse, vBindReverse, 0, bindReverse[0])
 
     vBindReverse = vBindReverse + ([tr.identity()] * (70 - len(vBindReverse)))
@@ -280,6 +280,7 @@ if __name__ == "__main__":
         print(object_id)
         joints = []
         weights = []
+        print(count)
         cDWeigths = checkData(gltf, gltf.meshes[count].primitives[0].attributes.WEIGHTS_0)
         cDJoints = checkData(gltf, gltf.meshes[count].primitives[0].attributes.JOINTS_0)
         for i in range(len(cDWeigths)):
