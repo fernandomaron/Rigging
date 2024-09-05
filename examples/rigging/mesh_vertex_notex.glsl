@@ -33,8 +33,8 @@ void main() {
 		+ mat3(BoneWeights.w * bones[ int(BoneIndices[3]) ]) )) * Normal;
 
 	frag_normal = mat3(transpose(inverse(transform))) * skinned_normal;
-	frag_color = vec4(Color);
-	frag_position = vec3(transform * skinned);
+	frag_color = vec4(Color)*0.01;
+	frag_position = (transform * skinned).xyz;
 	gl_Position = vec4(frag_position, 1.0f);
 
 }

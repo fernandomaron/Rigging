@@ -130,7 +130,7 @@ def addJointDict(joints, cjoint, graph, axis, axis_pipeline, point_list, parent_
             graph.add_edge(cjoint, node)
             graph.add_edge(node, "axis"+node)
             point_list.append(parent_point @ np.array(joints[cjoint][node]["matrix"]))
-            g_bones.append(parent_point @ np.array(joints[cjoint][node]["matrix"]))
+            g_bones.append(np.array(joints[cjoint][node]["matrix"]))
             addJointDict(joints, node, graph, axis, axis_pipeline, point_list, parent_point @ np.matrix(joints[cjoint][node]["matrix"]))
     return graph
 
@@ -186,8 +186,20 @@ if __name__ == "__main__":
     meshGraph = triMesh.graph.to_networkx()
     
     gltf = GLTF2().load(filename)
-    rootJointNode = gltf.nodes[gltf.skins[0].joints[0]].name
-
+    rootJointNode = gltf.nodes[gltf.skins[0].joints[0]]
+    node_transform = tr.identity()
+    if rootJointNode.scale:
+        node_transform = tr.scale(*rootJointNode.scale) @ node_transform 
+    if rootJointNode.rotation:
+        qx = tm.transformations.quaternion_about_axis(rootJointNode.rotation[0], [1, 0, 0])
+        qy = tm.transformations.quaternion_about_axis(rootJointNode.rotation[1], [0, 1, 0])
+        qz = tm.transformations.quaternion_about_axis(rootJointNode.rotation[2], [0, 0, 1])
+        q = tm.transformations.quaternion_multiply(qx, qy)
+        q = tm.transformations.quaternion_multiply(q, qz)
+        node_transform = tm.transformations.quaternion_matrix(q) @ node_transform
+    if rootJointNode.translation:
+        length_in = np.linalg.norm(tr.translate(*rootJointNode.translation) - tr.translate(0,0,0))
+        node_transform = tr.translate(*rootJointNode.translation) @ node_transform
 
     asset = triMesh
     
@@ -220,21 +232,21 @@ if __name__ == "__main__":
 
     graph = nx.DiGraph(root = "")
     graph.add_node(
-        rootJointNode,
+        rootJointNode.name,
         transform= tr.identity(),
     )
     graph.add_node(
-        "axis"+rootJointNode,
+        "axis"+rootJointNode.name,
         mesh=axis_gpu,
         pipeline=axis_pipeline,
         transform= tr.identity(),
         mode=GL.GL_LINES
     )
-    graph.add_edge("root", rootJointNode)
-    graph.add_edge(rootJointNode, "axis"+rootJointNode)
-    g_bones.append(tr.identity())
-    bones = [tr.identity()]
-    graph = addJointDict(meshGraph, rootJointNode, graph, axis_gpu, axis_pipeline, bones, tr.identity())
+    graph.add_edge("root", rootJointNode.name)
+    graph.add_edge(rootJointNode.name, "axis"+rootJointNode.name)
+    g_bones.append(node_transform)
+    bones = [node_transform]
+    graph = addJointDict(meshGraph, rootJointNode.name, graph, axis_gpu, axis_pipeline, bones, tr.identity())
 
     cloud = tm.PointCloud(bones)
 
@@ -244,7 +256,7 @@ if __name__ == "__main__":
     # Calculamos la posición de cada hueso segun su reverse bind al punto de origen5
     vBindReverse = parentBones(gltf, jointnums, bindReverse, vBindReverse, 0, bindReverse[0])
 
-    vBindReverse = vBindReverse + ([tr.identity()] * (70 - len(vBindReverse)))
+    vBindReverse = bindReverse + ([tr.identity()] * (70 - len(bindReverse)))
 
     node_scale = 1.0/np.linalg.norm(cloud.bounds[0] - cloud.bounds[1])
     v_bones = []
@@ -366,7 +378,7 @@ if __name__ == "__main__":
     @window.event
     def on_draw():
         GL.glClearColor(0.5, 0.5, 0.5, 1.0)
-        GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_FILL)
+        GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_LINE)
         GL.glLineWidth(1.0)
         GL.glEnable(GL.GL_DEPTH_TEST)
         GL.glEnable(GL.GL_BLEND)
@@ -378,7 +390,7 @@ if __name__ == "__main__":
             # dibujamos cada una de las mallas con su respectivo pipeline
             pipeline = object_geometry["pipeline"]
             pipeline.use()
-            pipeline["transform"] = (tr.translate(-0.3, 0, 0) @ arcball.pose).reshape(16, 1, order="F")
+            pipeline["transform"] = (arcball.pose @ tr.translate(-0.3, 0, 0)).reshape(16, 1, order="F")
             pipeline["light_position"] = np.array([-1.0, 1.0, -1.0])
             for i in range(70):
                 pipeline["bone"+str(i)] = v_bones[i].reshape(16, 1, order="F")
@@ -398,7 +410,7 @@ if __name__ == "__main__":
 
         # a medida que nos movemos por las aristas vamos a necesitar la transformación de cada nodo
         # partimos con la transformación del nodo raíz
-        transformations = {rootJointNode: graph.nodes[rootJointNode]["transform"] @ tr.uniformScale(node_scale)  @ tr.translate(node_scale, 0, 0)  @ arcball.pose}
+        transformations = {rootJointNode.name: graph.nodes[rootJointNode.name]["transform"] @ tr.uniformScale(node_scale)  @ tr.translate(node_scale, 0, 0)  @ arcball.pose}
         
         axis_pipeline["view"] = tr.lookAt(
             np.array([0, 0, 5]), np.array([0, 0, 0]), np.array([0, 1, 0])
