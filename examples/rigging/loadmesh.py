@@ -19,7 +19,7 @@ from pygltflib import GLTF2
 from grafica.arcball import Arcball
 from grafica.textures import texture_2D_setup
 
-g_bones = []
+# Data necessary to check the GLTF files
 
 accessorComponentType = {5120 : "b",
                          5121 : "B",
@@ -52,64 +52,13 @@ sys.path.append(
 import grafica.transformations as tr
 from grafica.utils import load_pipeline
 
-def recursive_add_node(graph, json, count, axis, axis_pipeline, escale = 1, center = [0, 0, 0]):
-    bone_list = json.skins[0].joints
-    node = json.nodes[bone_list[count]]
-    node_transform = tr.identity()
-    length_in = 0.5
-    length_out = 0.5
-    if count == 0:
-        node_transform = tr.translate(-center[0], -center[1], -center[2]) @ tr.uniformScale(escale)
-    if node.scale:
-        node_transform = tr.scale(*node.scale) @ node_transform 
-    if node.rotation:
-        qx = tm.transformations.quaternion_about_axis(node.rotation[0], [1, 0, 0])
-        qy = tm.transformations.quaternion_about_axis(node.rotation[1], [0, 1, 0])
-        qz = tm.transformations.quaternion_about_axis(node.rotation[2], [0, 0, 1])
-        q = tm.transformations.quaternion_multiply(qx, qy)
-        q = tm.transformations.quaternion_multiply(q, qz)
-        node_transform = tm.transformations.quaternion_matrix(q) @ node_transform
-    if node.translation:
-        length_in = np.linalg.norm(tr.translate(*node.translation) - tr.translate(0,0,0))
-        node_transform = tr.translate(*node.translation) @ node_transform
-        #print (node.name, node.translation)
-    
-    graph.add_node(
-        node.name,
-        transform=node_transform,
-    )
-    #print (node.name, axis.position)
-    
-    if node.children:
-        for child in node.children:
-            graph, count, length_out = recursive_add_node(graph, json, count+1, axis, axis_pipeline)
-            graph.add_edge(node.name, json.nodes[child].name)
-            #print(node.name, "->", json.nodes[child].name)
-    
-    
-    graph.add_node(
-        "axis"+node.name,
-        mesh=axis,
-        pipeline=axis_pipeline,
-        transform=tr.uniformScale(length_out),
-        mode=GL.GL_LINES if node.mesh is None else GL.GL_TRIANGLES,
-        color=np.array((1.0, 0.73, 0.03)) if not node.mesh is None else None
-    )
-    graph.add_edge(node.name, "axis"+node.name)
-    print(node.name, length_out)
-    return graph, count, length_in
-    
-
-def create_axis_graph(scene, axis, axis_pipeline):
-    graph = nx.DiGraph(root="root")
-    graph.add_node('root')
-
-    return graph
+# Function that allows to calculate the position of bones from the bone origin
 
 def parentBones(gltf, joints, bones, vBones, count, parent):
-    vBones.append(parent @ bones[count])
+    current_bone = bones[count] @ parent
+    vBones.append(current_bone)
     for child in gltf.nodes[joints[count]].children:
-        parentBones(gltf, joints, bones, vBones, count+1, parent @ bones[count])
+        vBones = parentBones(gltf, joints, bones, vBones, count+1, current_bone)
     return vBones
 
 def addJointDict(joints, cjoint, graph, axis, axis_pipeline, point_list, parent_point):
@@ -129,26 +78,29 @@ def addJointDict(joints, cjoint, graph, axis, axis_pipeline, point_list, parent_
             )
             graph.add_edge(cjoint, node)
             graph.add_edge(node, "axis"+node)
-            point_list.append(parent_point @ np.array(joints[cjoint][node]["matrix"]))
-            g_bones.append(np.array(joints[cjoint][node]["matrix"]))
+            point_list.append(np.array(joints[cjoint][node]["matrix"] @ parent_point))
+            # g_bones.append(np.array(joints[cjoint][node]["matrix"]) @ parent_point)
             addJointDict(joints, node, graph, axis, axis_pipeline, point_list, parent_point @ np.matrix(joints[cjoint][node]["matrix"]))
     return graph
 
-def addMeshToGraph(
-    mesh, mesh_pipeline, graph, name
-):   
-    graph.add_node(
-        name,
-        mesh=mesh,
-        pipeline=mesh_pipeline,
-        transform=tr.identity(),
-        mode=GL.GL_TRIANGLES,
-        color=np.array((1.0, 0.73, 0.03)) 
-    )
-
-    graph.add_edge('root', name)
-
-    return graph
+def nodeCheck(joints, nodes, parent_node, count, gltf):
+    node_transform = tr.identity()
+    if gltf.nodes[joints[count]].scale:
+        node_transform = tr.scale(*gltf.nodes[joints[count]].scale) @ node_transform 
+    if gltf.nodes[joints[count]].rotation:
+        qx = tm.transformations.quaternion_about_axis(gltf.nodes[joints[count]].rotation[0], [1, 0, 0])
+        qy = tm.transformations.quaternion_about_axis(gltf.nodes[joints[count]].rotation[1], [0, 1, 0])
+        qz = tm.transformations.quaternion_about_axis(gltf.nodes[joints[count]].rotation[2], [0, 0, 1])
+        q = tm.transformations.quaternion_multiply(qx, qy)
+        q = tm.transformations.quaternion_multiply(q, qz)
+        node_transform = tm.transformations.quaternion_matrix(q) @ node_transform
+    if gltf.nodes[joints[count]].translation:
+        node_transform = tr.translate(*gltf.nodes[joints[count]].translation) @ node_transform  
+    current_node = node_transform
+    nodes.append(current_node)
+    for child in gltf.nodes[joints[count]].children:
+        nodes = nodeCheck(joints, nodes, current_node, count+1, gltf)
+    return nodes
 
 
 def checkData(gltf, accessorNum):
@@ -181,7 +133,7 @@ if __name__ == "__main__":
 
     window = pyglet.window.Window(width, height)
 
-    filename = "assets/cube3.gltf"
+    filename = "assets/xBot/scene.gltf"
     triMesh = tm.load(filename)
     meshGraph = triMesh.graph.to_networkx()
     
@@ -198,21 +150,17 @@ if __name__ == "__main__":
         q = tm.transformations.quaternion_multiply(q, qz)
         node_transform = tm.transformations.quaternion_matrix(q) @ node_transform
     if rootJointNode.translation:
-        length_in = np.linalg.norm(tr.translate(*rootJointNode.translation) - tr.translate(0,0,0))
-        node_transform = tr.translate(*rootJointNode.translation) @ node_transform
-
+        node_transform = tr.translate(*rootJointNode.translation) @ node_transform    
     asset = triMesh
-    
-    
     # for object_id, object_geometry in asset.geometry.items():
     #     print("geo before", tm.rendering.mesh_to_vertexlist(object_geometry)[4][1])
     # de acuerdo a la documentación de trimesh, esto centra la escena
     # # no es igual a trabajar con una malla directamente
     scale = 1.0 / (asset.scale) 
-    center = asset.centroid
+    # center = asset.centroid
     # asset.rezero()
     # y esto la escala. se crea una copia, por eso la asignación
-    asset = asset.scaled(scale)
+    # asset = asset.scaled(scale)
     # for object_id, object_geometry in asset.geometry.items():
     #     print("geo after", tm.rendering.mesh_to_vertexlist(object_geometry)[4][1])
 
@@ -244,27 +192,25 @@ if __name__ == "__main__":
     )
     graph.add_edge("root", rootJointNode.name)
     graph.add_edge(rootJointNode.name, "axis"+rootJointNode.name)
-    g_bones.append(node_transform)
+    g_bones = []
+    g_bones = nodeCheck(jointnums, g_bones, tr.identity(), 0, gltf)
     bones = [node_transform]
     graph = addJointDict(meshGraph, rootJointNode.name, graph, axis_gpu, axis_pipeline, bones, tr.identity())
 
     cloud = tm.PointCloud(bones)
-
-    g_bones = g_bones + ([tr.identity()] * (70 - len(g_bones)))
+    print("gbones bbones", len(g_bones), len(bindReverse))
 
     vBindReverse = []
     # Calculamos la posición de cada hueso segun su reverse bind al punto de origen5
     vBindReverse = parentBones(gltf, jointnums, bindReverse, vBindReverse, 0, bindReverse[0])
-
-    vBindReverse = bindReverse + ([tr.identity()] * (70 - len(bindReverse)))
-
+    
     node_scale = 1.0/np.linalg.norm(cloud.bounds[0] - cloud.bounds[1])
     v_bones = []
 
     for i in range(len(g_bones)):
-        v_bones.append(g_bones[i] @ vBindReverse[i] @ tr.uniformScale(node_scale))
-        
-
+        v_bones.append(bindReverse[i] @ tr.uniformScale(node_scale) @ g_bones[i] @ tr.uniformScale(node_scale))
+    
+    v_bones = v_bones + ([tr.identity()] * (70 - len(v_bones)))
     print("v_nones:", len(v_bones))
 
 
@@ -332,7 +278,7 @@ if __name__ == "__main__":
         mesh["gpu_data"].Normal[:] = object_vlist[5][1]
 
 
-        print("wei:", weights[:20], "- joi:", joints[:20])
+        print("wei:", weights[:20], "- joi:", joints)
         mesh["gpu_data"].BoneWeights[:] = weights
         mesh["gpu_data"].BoneIndices[:] = joints
         # con (o sin) textura es diferente el procedimiento
@@ -410,7 +356,7 @@ if __name__ == "__main__":
 
         # a medida que nos movemos por las aristas vamos a necesitar la transformación de cada nodo
         # partimos con la transformación del nodo raíz
-        transformations = {rootJointNode.name: graph.nodes[rootJointNode.name]["transform"] @ tr.uniformScale(node_scale)  @ tr.translate(node_scale, 0, 0)  @ arcball.pose}
+        transformations = {rootJointNode.name: arcball.pose @ graph.nodes[rootJointNode.name]["transform"] @ tr.uniformScale(node_scale)  @ tr.translate(node_scale, 0, 0)}
         
         axis_pipeline["view"] = tr.lookAt(
             np.array([0, 0, 5]), np.array([0, 0, 0]), np.array([0, 1, 0])
